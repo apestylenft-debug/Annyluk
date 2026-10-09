@@ -33,6 +33,7 @@ label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)
 .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.chips .chip{padding:0 6px}
 .fab{position:fixed;right:max(16px,calc(50% - 244px));bottom:calc(20px + env(safe-area-inset-bottom));min-height:56px;border-radius:28px;background:var(--pri);color:#fff;box-shadow:0 6px 18px rgba(80,50,150,.35);z-index:5;padding:0 22px;font-size:16px}
 .note{background:var(--pink);border-radius:18px;padding:12px 14px;font-size:13px;color:var(--mut);margin:12px 0}.lk{color:var(--pri);font-size:13px;text-decoration:underline}
+.sw{position:relative;display:inline-block;width:46px;height:28px;flex:none}.sw input{position:absolute;inset:0;width:100%;height:100%;min-height:0;opacity:0;margin:0;padding:0;border:0;cursor:pointer;z-index:1}.sw i{position:absolute;inset:0;background:#cfc3ea;border-radius:14px;transition:.2s}.sw i:before{content:'';position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s}.sw input:checked+i{background:var(--pri)}.sw input:checked+i:before{transform:translateX(18px)}.off{opacity:.55}
 .sec{display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px}.sec button{min-height:38px;font-size:14px;background:var(--soft)}.err{color:var(--neg);font-size:14px;min-height:20px}
 </style>
 </head>
@@ -81,19 +82,19 @@ async function load(){
 }
 function cardRow(a){const b=bal(a),used=Math.max(0,-b),lim=Number(a.credit_limit||0),ps=IP.filter(p=>p.card_account_id===a.id);
   const pl=ps.map(p=>{const st=planStat(p);return `<div class="mut">ผ่อน: ${esc(p.title)} · ${fmt(st.per)}/งวด · จ่ายแล้ว ${st.paid}/${p.months} · เหลือ ${fmt(st.remain)}</div>`}).join('');
-  return `<div class="row" style="align-items:flex-start"><div><div>${esc(a.nickname)}</div>${lim?`<div class="mut">ใช้ไป ${fmt(used)} จากวงเงิน ${fmt(lim)} · เหลือ ${fmt(lim-used)}</div>`:'<div class="mut">ยังไม่ได้ตั้งวงเงิน</div>'}${pl}<a href="#" class="lk" onclick="setLimit('${a.id}');return false">แก้ไขวงเงิน</a> · <a href="#" class="lk" onclick="openPlans('${a.id}');return false">ผ่อนชำระ${ps.length?' ('+ps.length+')':''}</a></div><span class="b">${fmt(b)}</span></div>`}
+  return `<div class="row${a.exclude_from_total?' off':''}" style="align-items:flex-start"><div><div>${esc(a.nickname)}${a.exclude_from_total?' <span class="mut">· ไม่รวมในยอดรวม</span>':''}</div>${lim?`<div class="mut">ใช้ไป ${fmt(used)} จากวงเงิน ${fmt(lim)} · เหลือ ${fmt(lim-used)}</div>`:'<div class="mut">ยังไม่ได้ตั้งวงเงิน</div>'}${pl}<a href="#" class="lk" onclick="setLimit('${a.id}');return false">แก้ไขวงเงิน</a> · <a href="#" class="lk" onclick="openPlans('${a.id}');return false">ผ่อนชำระ${ps.length?' ('+ps.length+')':''}</a></div><span style="display:flex;align-items:center;gap:10px"><span class="b">${fmt(b)}</span>${sw(a)}</span></div>`}
 async function setLimit(id){const a=A.find(x=>x.id===id),v=prompt('วงเงินของ '+a.nickname+' (บาท)',a.credit_limit||'');if(v===null)return;
   const n=Number(v);if(!(n>=0)){alert('ใส่ตัวเลขวงเงิน');return}await q(sb.from('accounts').update({credit_limit:n}).eq('id',id));load()}
 function home(){
   const non=A.filter(a=>a.account_type!=='card'),cards=A.filter(a=>a.account_type==='card');
-  const tot=non.reduce((s,a)=>s+bal(a),0),debt=cards.reduce((s,a)=>s+Math.min(0,bal(a)),0);
+  const nEx=A.filter(a=>a.exclude_from_total).length,tot=non.filter(a=>!a.exclude_from_total).reduce((s,a)=>s+bal(a),0),debt=cards.filter(a=>!a.exclude_from_total).reduce((s,a)=>s+Math.min(0,bal(a)),0);
   const groups={};A.forEach(a=>{const k=a.institution||'อื่นๆ';(groups[k]=groups[k]||[]).push(a)});
   let h=`<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><h1>AnnyLuk Finance</h1><div class="mut">ภาพรวมบัญชี · ข้อมูลจริงจาก Supabase</div></div><button class="ghost" onclick="logout()">ออก</button></div>
   <div class="note">ยอดที่แสดงคือผลรวมจากรายการที่บันทึกในระบบนี้เท่านั้น ยังไม่ผ่านการกระทบยอดกับ statement จริง ตอนนี้รองรับ รายรับ / รายจ่าย / โอน / รูดบัตร / หุ้น-กองทุน ทองคำ เงินตราต่างประเทศ และผ่อนชำระ</div>
-  <div class="hero"><div style="opacity:.9;font-size:14px">ยอดรวมบัญชีที่ไม่ใช่บัตร</div><div class="n">${fmt(tot)}</div><div style="font-size:13px;opacity:.9">หนี้บัตรเครดิตรวม ${fmt(-debt)}</div><div style="font-size:13px;opacity:.9">มูลค่าสินทรัพย์ลงทุน (หุ้น ทอง เงินตรา) ตามราคาล่าสุด ${fmt(portfolioTotal())}</div></div>
-  ${staleBanner()}<div class="sec"><h2 style="margin:0">บัญชี</h2><div style="display:flex;gap:8px"><button onclick="openManage()">จัดการบัญชี</button><button onclick="openMonth()">สรุปรายเดือน</button></div></div>`;
+  <div class="hero"><div style="opacity:.9;font-size:14px">ยอดรวมบัญชีที่ไม่ใช่บัตร${nEx?` (ไม่รวม ${nEx} บัญชี)`:''}</div><div class="n">${fmt(tot)}</div><div style="font-size:13px;opacity:.9">หนี้บัตรเครดิตรวม ${fmt(-debt)}</div><div style="font-size:13px;opacity:.9">มูลค่าสินทรัพย์ลงทุน (หุ้น ทอง เงินตรา) ตามราคาล่าสุด ${fmt(portfolioTotal())}</div></div>
+  ${staleBanner()}<div class="sec"><h2 style="margin:0">บัญชี</h2><div style="display:flex;gap:8px"><button onclick="openManage()">จัดการบัญชี</button><button onclick="openMonth()">สรุปรายเดือน</button></div></div><div class="mut" style="margin:-2px 0 4px">สวิตช์ท้ายแต่ละบัญชี: เปิด = นับรวมในยอดรวม · ปิด = ไม่รวม</div>`;
   if(!A.length)h+='<div class="card"><p class="mut">ยังไม่มีบัญชี กด "จัดการบัญชี" เพื่อเพิ่ม</p></div>';
-  for(const g in groups){h+=`<div class="mut" style="margin:12px 0 4px">${esc(g)}</div><div class="card">`+groups[g].map(a=>a.account_type==='card'?cardRow(a):`<div class="row"><span>${esc(a.nickname)}</span><span class="b">${fmt(bal(a))}</span></div>`).join('')+'</div>'}
+  for(const g in groups){h+=`<div class="mut" style="margin:12px 0 4px">${esc(g)}</div><div class="card">`+groups[g].map(a=>a.account_type==='card'?cardRow(a):`<div class="row${a.exclude_from_total?' off':''}"><span>${esc(a.nickname)}${a.exclude_from_total?' <span class="mut">· ไม่รวมในยอดรวม</span>':''}</span><span style="display:flex;align-items:center;gap:10px"><span class="b">${fmt(bal(a))}</span>${sw(a)}</span></div>`).join('')+'</div>'}
   h+=portfolioHTML('security')+portfolioHTML('gold')+portfolioHTML('fx');h+='<h2>ประวัติล่าสุด</h2><div class="card">';
   h+=T.length?T.slice(0,50).map(t=>{const inn=isIn(t);
     return `<div class="row" onclick="openSlip('${t.id}')" style="cursor:pointer"><div><div>${TL[t.txn_type]}${t.category?' · '+esc(t.category):''}${t.owner?' · '+esc(t.owner):''}</div><div class="mut">${fdt(t.occurred_at)}</div></div><span class="b" style="color:${inn?'var(--pos)':t.txn_type==='transfer'?'var(--ink)':'var(--neg)'}">${t.txn_type==='transfer'?'':inn?'+':'-'}${fmt(t.amount)}</span></div>`}).join(''):'<p class="mut">ยังไม่มีรายการ กด "+ เพิ่มรายการ" เพื่อเริ่มบันทึก</p>';
@@ -134,13 +135,13 @@ function symList(){return[...new Set(L.filter(l=>lotKind(l)==='security').map(l=
 function priceRow(s){return PR.find(x=>x.symbol===s)}
 function fxRate(c){const p=priceRow('FX:'+c)||(c==='USD'?priceRow('USDTHB'):null);return p?Number(p.price):null}
 function fxNow(){return fxRate('USD')}
-function holdings(kind){const m={};
-  for(const l of L){if(lotKind(l)!==kind||SL.some(s=>s.lot_id===l.id))continue;
+function holdings(kind,inc){const m={};
+  for(const l of L){if(lotKind(l)!==kind||SL.some(s=>s.lot_id===l.id)||(inc&&excl(l.holding_account_id)))continue;
     const h=m[l.symbol]=m[l.symbol]||{sym:l.symbol,kind,cur:l.currency,units:0,cost:0};h.units+=Number(l.units);h.cost+=Number(l.cost_thb)}
   return Object.values(m).map(h=>{const p=priceRow(kind==='gold'?'GOLD':h.sym);h.price=p?Number(p.price):null;h.asof=p?p.as_of:null;let v=null;
     if(h.price!=null){if(kind==='gold')v=h.units/GRAM*h.price;else if(kind==='fx')v=h.units*h.price;else{const fx=h.cur==='USD'?fxNow():1;v=fx!=null?h.units*h.price*fx:null}}
     h.value=v;h.pl=v==null?null:v-h.cost;return h})}
-function portfolioTotal(){return['security','gold','fx'].reduce((s,k)=>s+holdings(k).reduce((a,h)=>a+(h.value!=null?h.value:h.cost),0),0)}
+function portfolioTotal(){return['security','gold','fx'].reduce((s,k)=>s+holdings(k,true).reduce((a,h)=>a+(h.value!=null?h.value:h.cost),0),0)}
 function staleBanner(){const n=['security','gold','fx'].reduce((c,k)=>c+holdings(k).filter(x=>x.price==null||x.value==null||stale(x.asof)).length,0);
   return n?`<div class="note" style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span>ราคาของ ${n} รายการยังไม่ได้อัปเดตวันนี้ มูลค่าอาจไม่ตรงปัจจุบัน</span><button onclick="openPrices()" style="min-height:38px;font-size:14px">อัปเดตราคา</button></div>`:''}
 function priceText(x){return x.kind==='gold'?`ราคารับซื้อ ${fmt(x.price)} / บาททอง`:x.kind==='fx'?`อัตรา ${x.price} บาท/${x.sym.replace('FX:','')}`:`ราคา ${x.price} ${x.cur}`}
@@ -342,6 +343,9 @@ async function saveAcct(id){
 }
 async function delAcct(id){if(!confirm('ลบบัญชีนี้? รายการเก่าที่เกี่ยวข้องจะยังอยู่ในประวัติ'))return;
   await q(sb.from('accounts').update({deleted_at:new Date().toISOString()}).eq('id',id));await load();openManage()}
+const excl=id=>{const a=A.find(x=>x.id===id);return !!(a&&a.exclude_from_total)};
+const sw=a=>`<span class="sw" title="นับรวมในยอดรวม"><input type="checkbox" aria-label="นับรวมในยอดรวม ${esc(a.nickname)}" ${a.exclude_from_total?'':'checked'} onchange="toggleInc('${a.id}',this.checked)"><i></i></span>`;
+async function toggleInc(id,on){await q(sb.from('accounts').update({exclude_from_total:!on}).eq('id',id));const a=A.find(x=>x.id===id);if(a)a.exclude_from_total=!on;home()}
 init();
 </script>
 </body>
