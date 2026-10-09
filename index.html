@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Anny Finance">
+<meta name="theme-color" content="#F6F0FF">
+<title>AnnyLuk Finance</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@400;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#F6F0FF;--ink:#3B2F5C;--mut:#6E6392;--pri:#7457C2;--soft:#E4D6FA;--line:#EFE7FB;--pink:#FCE8F3;--neg:#B0407E;--pos:#2F7D5B}
+@media(prefers-color-scheme:dark){:root{--bg:#1E1830;--ink:#F0E9FF;--mut:#B6A9D6;--pri:#9B82E6;--soft:#3A2F5C;--line:#32284F;--pink:#3A2440;--neg:#F08CBD;--pos:#7ED3AA}.card,.sheet,input,select{background:#2A2142!important}button.pri{color:#1E1830!important}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'Mali',sans-serif}
+body{padding:calc(20px + env(safe-area-inset-top)) 16px calc(100px + env(safe-area-inset-bottom));max-width:520px;margin:0 auto}
+h1,h2{margin:0}h2{font-size:17px;margin:18px 0 8px}
+.card{background:#fff;border-radius:20px;padding:6px 16px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border:0}.mut{color:var(--mut);font-size:13px}.b{font-weight:600}
+button{font-family:inherit;min-height:46px;border:0;border-radius:16px;padding:0 14px;font-size:15px;background:#fff;color:var(--pri);font-weight:600;cursor:pointer}
+button.pri{background:var(--pri);color:#fff}button.ghost{background:transparent;border:1.5px solid var(--soft)}button.del{background:transparent;color:var(--neg);border:1.5px solid var(--soft)}
+.chip{border-radius:22px;background:var(--soft);min-height:44px}.chip.on{background:var(--pri);color:#fff}
+input,select{width:100%;min-height:46px;border:1.5px solid var(--soft);border-radius:14px;padding:0 12px;font:inherit;font-size:16px;background:#FBF8FF;color:var(--ink)}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut);margin-bottom:10px}
+.hero{background:var(--pri);color:#fff;border-radius:24px;padding:20px;margin:14px 0}
+.hero .n{font-size:32px;font-weight:600}.btns{display:flex;gap:8px}.btns button{flex:1}
+.bar{height:10px;border-radius:5px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:#B79CF0}
+#ov{position:fixed;inset:0;background:rgba(40,25,70,.45);display:none;align-items:flex-end;justify-content:center;z-index:9}
+.sheet{background:#fff;width:100%;max-width:520px;max-height:92vh;overflow:auto;border-radius:26px 26px 0 0;padding:20px 18px calc(24px + env(safe-area-inset-bottom))}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.chips .chip{padding:0 6px}
+.fab{position:fixed;right:max(16px,calc(50% - 244px));bottom:calc(20px + env(safe-area-inset-bottom));min-height:56px;border-radius:28px;background:var(--pri);color:#fff;box-shadow:0 6px 18px rgba(80,50,150,.35);z-index:5;padding:0 22px;font-size:16px}
+.note{background:var(--pink);border-radius:18px;padding:12px 14px;font-size:13px;color:var(--mut);margin:12px 0}.lk{color:var(--pri);font-size:13px;text-decoration:underline}
+.sec{display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px}.sec button{min-height:38px;font-size:14px;background:var(--soft)}.err{color:var(--neg);font-size:14px;min-height:20px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="ov" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="sheet"></div></div>
+<script>
+const SB_URL='https://etqgjkeyoxgfncphtiao.supabase.co';
+const SB_KEY='sb_publishable_adz6BHqdK99sKdBnJsNk-g_PRRhpYTj';
+const TL={income:'รายรับ',expense:'รายจ่าย',transfer:'โอน',card_purchase:'รูดบัตร',card_payment:'ชำระบัตรเครดิต',security_buy:'ซื้อหุ้น/กองทุน',security_sell:'ขายหุ้น/กองทุน'};
+const AT={deposit:'เงินฝาก',card:'บัตรเครดิต',securities:'หุ้น/กองทุน',other:'อื่นๆ'};
+let sb,A=[],T=[],L=[],SL=[],PR=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>(n<0?'-':'')+'฿'+Math.abs(Number(n)).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fdt=d=>new Date(d).toLocaleString('th-TH',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const nm=id=>{const a=A.find(x=>x.id===id);return a?a.nickname:'(บัญชีที่ลบแล้ว)'};
+async function q(p){const r=await p;if(r.error){alert('ผิดพลาด: '+r.error.message);throw r.error}return r.data}
+function openSheet(h){$('sheet').innerHTML=h;$('ov').style.display='flex'}
+function closeSheet(){$('ov').style.display='none'}
+function bal(a){let b=Number(a.opening_balance);for(const t of T){if(t.to_account_id===a.id)b+=Number(t.amount);if(t.from_account_id===a.id)b-=Number(t.amount)}return b}
+
+async function init(){
+  if(!window.supabase){$('app').innerHTML='<p class="err">โหลดระบบไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้</p>';return}
+  sb=supabase.createClient(SB_URL,SB_KEY);
+  const{data}=await sb.auth.getSession();
+  data.session?load():loginView();
+}
+function loginView(){
+  $('app').innerHTML=`<h1 style="margin-top:40px">AnnyLuk Finance</h1><p class="mut">เข้าสู่ระบบเพื่อดูบัญชีของคุณ</p>
+  <div class="card" style="padding:18px"><label>อีเมล<input id="em" type="email" autocomplete="username"></label>
+  <label>รหัสผ่าน<input id="pw" type="password" autocomplete="current-password"></label>
+  <div class="err" id="le"></div><button class="pri" style="width:100%" onclick="login()">เข้าสู่ระบบ</button></div>`;
+}
+async function login(){
+  const{error}=await sb.auth.signInWithPassword({email:$('em').value.trim(),password:$('pw').value});
+  if(error){$('le').textContent='เข้าสู่ระบบไม่สำเร็จ: '+error.message;return}
+  load();
+}
+async function logout(){await sb.auth.signOut();A=[];T=[];loginView()}
+async function load(){
+  A=await q(sb.from('accounts').select('*').is('deleted_at',null).order('display_order'));
+  T=await q(sb.from('transactions').select('*').is('deleted_at',null).order('occurred_at',{ascending:false}));
+  L=await q(sb.from('security_lots').select('*'));SL=await q(sb.from('security_sales').select('*'));PR=await q(sb.from('security_prices').select('*'));
+  home();
+}
+function cardRow(a){const b=bal(a),used=Math.max(0,-b),lim=Number(a.credit_limit||0);
+  return `<div class="row" style="align-items:flex-start"><div><div>${esc(a.nickname)}</div>${lim?`<div class="mut">ใช้ไป ${fmt(used)} จากวงเงิน ${fmt(lim)} · เหลือ ${fmt(lim-used)}</div>`:'<div class="mut">ยังไม่ได้ตั้งวงเงิน</div>'}<a href="#" class="lk" onclick="setLimit('${a.id}');return false">แก้ไขวงเงิน</a></div><span class="b">${fmt(b)}</span></div>`}
+async function setLimit(id){const a=A.find(x=>x.id===id),v=prompt('วงเงินของ '+a.nickname+' (บาท)',a.credit_limit||'');if(v===null)return;
+  const n=Number(v);if(!(n>=0)){alert('ใส่ตัวเลขวงเงิน');return}await q(sb.from('accounts').update({credit_limit:n}).eq('id',id));load()}
+function home(){
+  const non=A.filter(a=>a.account_type!=='card'),cards=A.filter(a=>a.account_type==='card');
+  const tot=non.reduce((s,a)=>s+bal(a),0),debt=cards.reduce((s,a)=>s+Math.min(0,bal(a)),0);
+  const groups={};A.forEach(a=>{const k=a.institution||'อื่นๆ';(groups[k]=groups[k]||[]).push(a)});
+  let h=`<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><h1>AnnyLuk Finance</h1><div class="mut">ภาพรวมบัญชี · ข้อมูลจริงจาก Supabase</div></div><button class="ghost" onclick="logout()">ออก</button></div>
+  <div class="note">ยอดที่แสดงคือผลรวมจากรายการที่บันทึกในระบบนี้เท่านั้น ยังไม่ผ่านการกระทบยอดกับ statement จริง ตอนนี้รองรับ รายรับ / รายจ่าย / โอน / รูดบัตร / หุ้น-กองทุน ส่วนทองและผ่อนชำระจะเพิ่มในเฟสถัดไป</div>
+  <div class="hero"><div style="opacity:.9;font-size:14px">ยอดรวมบัญชีที่ไม่ใช่บัตร</div><div class="n">${fmt(tot)}</div><div style="font-size:13px;opacity:.9">หนี้บัตรเครดิตรวม ${fmt(-debt)}</div><div style="font-size:13px;opacity:.9">มูลค่าหุ้น/กองทุนตามราคาล่าสุด ${fmt(portfolioTotal())}</div></div>
+  <div class="sec"><h2 style="margin:0">บัญชี</h2><div style="display:flex;gap:8px"><button onclick="openManage()">จัดการบัญชี</button><button onclick="openMonth()">สรุปรายเดือน</button></div></div>`;
+  if(!A.length)h+='<div class="card"><p class="mut">ยังไม่มีบัญชี กด "จัดการบัญชี" เพื่อเพิ่ม</p></div>';
+  for(const g in groups){h+=`<div class="mut" style="margin:12px 0 4px">${esc(g)}</div><div class="card">`+groups[g].map(a=>a.account_type==='card'?cardRow(a):`<div class="row"><span>${esc(a.nickname)}</span><span class="b">${fmt(bal(a))}</span></div>`).join('')+'</div>'}
+  h+=portfolioHTML();h+='<h2>ประวัติล่าสุด</h2><div class="card">';
+  h+=T.length?T.slice(0,50).map(t=>{const inn=isIn(t);
+    return `<div class="row" onclick="openSlip('${t.id}')" style="cursor:pointer"><div><div>${TL[t.txn_type]}${t.category?' · '+esc(t.category):''}${t.owner?' · '+esc(t.owner):''}</div><div class="mut">${fdt(t.occurred_at)}</div></div><span class="b" style="color:${inn?'var(--pos)':t.txn_type==='transfer'?'var(--ink)':'var(--neg)'}">${t.txn_type==='transfer'?'':inn?'+':'-'}${fmt(t.amount)}</span></div>`}).join(''):'<p class="mut">ยังไม่มีรายการ กด "+ เพิ่มรายการ" เพื่อเริ่มบันทึก</p>';
+  $('app').innerHTML=h+'</div><button class="fab" onclick="openAdd(\'expense\')">+ เพิ่มรายการ</button>';
+}
+function nowLocal(){const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
+function opts(list,sel){return '<option value="">เลือกบัญชี</option>'+list.map(a=>`<option value="${a.id}"${a.id===sel?' selected':''}>${esc(a.nickname)}</option>`).join('')}
+function openAdd(type){
+  const cards=A.filter(a=>a.account_type==='card'),non=A.filter(a=>a.account_type!=='card');
+  const ORDER=['income','expense','transfer','card_payment','card_purchase','security_buy','security_sell'];
+  const chips=`<label>ประเภทรายการ<select onchange="openAdd(this.value)">${ORDER.map(k=>`<option value="${k}"${k===type?' selected':''}>${TL[k]}</option>`).join('')}</select></label>`;
+  let f='';
+  if(type==='income')f=`<label>บัญชีที่รับเข้า<select id="to">${opts(A)}</select></label>`;
+  if(type==='expense')f=`<label>บัญชีที่จ่าย<select id="from">${opts(non)}</select></label>`;
+  if(type==='transfer')f=`<label>จากบัญชี<select id="from">${opts(A)}</select></label><label>ไปบัญชี (จ่ายบัตรคืน เลือกบัตรตรงนี้)<select id="to">${opts(A)}</select></label>`;
+  if(type==='card_purchase')f=`<label>บัตรที่รูด<select id="from">${opts(cards)}</select></label>`;
+  if(type==='card_payment')f=`<label>บัญชีต้นทาง (จ่ายจาก)<select id="from">${opts(non)}</select></label><label>บัตรเครดิตที่ชำระ<select id="to">${opts(cards)}</select></label>`;
+  if(type==='security_buy')f=secBuyForm();if(type==='security_sell')f=secSellForm();
+  window._type=type;const sec=type.startsWith('security');
+  openSheet(`<h2 style="margin-top:0">เพิ่มรายการ</h2>${chips}${f}
+  <label>${type==='security_buy'?'ยอดที่จ่ายจริง (บาท)':type==='security_sell'?'ยอดที่ได้รับ (บาท คำนวณให้)':'จำนวนเงิน (บาท)'}<input id="amt" type="number" inputmode="decimal" step="0.01" min="0"${type==='security_sell'?' readonly':''}></label>
+  ${sec?'':'<label>หมวด / รายละเอียด<input id="cat"></label>'}<label>วันที่-เวลา<input id="dt" type="datetime-local" value="${nowLocal()}"></label>
+  <label>เจ้าของ (ไม่บังคับ เช่น ชื่อคนในครอบครัว เว้นว่างได้ถ้าเป็นของกลาง)<input id="own"></label><label>หมายเหตุ (ไม่บังคับ)<input id="note"></label><div class="err" id="fe"></div>
+  <button class="pri" style="width:100%" onclick="preview('${type}')">ตรวจสอบก่อนบันทึก</button>`);
+}
+function isIn(t){return t.txn_type==='income'||t.txn_type==='security_sell'}
+function lotDate(l){const t=T.find(x=>x.id===l.buy_txn_id);return t?t.occurred_at:l.created_at}
+function symList(){return[...new Set(L.map(l=>l.symbol))]}
+function priceRow(s){return PR.find(x=>x.symbol===s)}
+function fxNow(){const p=priceRow('USDTHB');return p?Number(p.price):null}
+function holdings(){const m={};for(const l of L){if(SL.some(s=>s.lot_id===l.id))continue;const h=m[l.symbol]=m[l.symbol]||{sym:l.symbol,cur:l.currency,units:0,cost:0};h.units+=Number(l.units);h.cost+=Number(l.cost_thb)}
+  return Object.values(m).map(h=>{const p=priceRow(h.sym),fx=h.cur==='USD'?fxNow():1;h.price=p?Number(p.price):null;h.asof=p?p.as_of:null;h.value=(h.price!=null&&fx!=null)?h.units*h.price*fx:null;h.pl=h.value==null?null:h.value-h.cost;return h})}
+function portfolioTotal(){return holdings().reduce((s,h)=>s+(h.value!=null?h.value:h.cost),0)}
+function portfolioHTML(){
+  const hs=holdings();let h=`<div class="sec"><h2 style="margin:0">หุ้น / กองทุน</h2><button onclick="openPrices()">อัปเดตราคา</button></div>`;
+  if(!hs.length)return h+'<div class="card"><p class="mut">ยังไม่มีหุ้น/กองทุน กด "+ เพิ่มรายการ" แล้วเลือก ซื้อหุ้น/กองทุน</p></div>';
+  h+='<div class="card">'+hs.map(x=>`<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="row" style="border:0;padding:0"><span class="b">${esc(x.sym)}</span><span class="b">${x.value==null?'-':fmt(x.value)}</span></div>
+  <div class="mut">${Number(x.units.toFixed(6))} หน่วย · ต้นทุน ${fmt(x.cost)}</div>
+  ${x.value==null?'<div class="mut">ยังไม่ได้ตั้งราคา กด "อัปเดตราคา"'+(x.cur==='USD'&&fxNow()==null?' (และอัตรา USD/THB)':'')+'</div>':`<div class="mut">ราคา ${x.price} ${x.cur} · ณ ${fdt(x.asof)}</div><div style="color:${x.pl>=0?'var(--pos)':'var(--neg)'};font-size:14px">กำไร/ขาดทุน ${x.pl>=0?'+':''}${fmt(x.pl)} (${x.cost?(x.pl/x.cost*100).toFixed(2):'0.00'}%)</div>`}</div>`).join('')+`<div class="row"><span class="b">มูลค่าพอร์ตรวม</span><span class="b">${fmt(portfolioTotal())}</span></div></div>`;
+  return h}
+function openPrices(){const hs=holdings();if(!hs.length){alert('ยังไม่มีหุ้น/กองทุนที่ถืออยู่');return}
+  openSheet(`<h2 style="margin-top:0">อัปเดตราคาล่าสุด</h2><p class="mut">กรอกราคาจากแอปที่ใช้ซื้อขาย (เช่น Dime หรือราคา NAV ของกองทุน) ระบบจะคำนวณมูลค่าและกำไร/ขาดทุนให้</p>`+
+  hs.map(h=>`<label>${esc(h.sym)} (ราคาต่อหน่วย ${h.cur})<input data-s="${esc(h.sym)}" type="number" step="any" inputmode="decimal" value="${h.price==null?'':h.price}"></label>`).join('')+
+  (hs.some(h=>h.cur==='USD')?`<label>อัตราแลกเปลี่ยนปัจจุบัน (บาทต่อ 1 USD)<input data-s="USDTHB" type="number" step="any" inputmode="decimal" value="${fxNow()||''}"></label>`:'')+
+  `<div class="btns"><button class="ghost" onclick="closeSheet()">ยกเลิก</button><button class="pri" onclick="savePrices()">บันทึกราคา</button></div>`)}
+async function savePrices(){const rows=[];document.querySelectorAll('#sheet input[data-s]').forEach(el=>{const v=Number(el.value);if(el.value!==''&&v>0)rows.push({symbol:el.dataset.s,price:v,as_of:new Date().toISOString()})});
+  if(!rows.length){alert('ใส่ราคาอย่างน้อย 1 รายการ');return}
+  await q(sb.from('security_prices').upsert(rows,{onConflict:'created_by,symbol'}));closeSheet();load()}
+function secBuyForm(){const non=A.filter(a=>a.account_type!=='card'),sec=A.filter(a=>a.account_type==='securities');
+  return `<label>บัญชีที่จ่ายเงิน<select id="from">${opts(non)}</select></label><label>บัญชีที่ถือ (เช่น กองทุน, Dime)<select id="hold">${opts(sec.length?sec:A)}</select></label>
+  <label>ชื่อหลักทรัพย์ (เช่น AAPL หรือชื่อกองทุน)<input id="sym" list="syms"></label><datalist id="syms">${symList().map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
+  <label>สกุลเงิน<select id="cur" onchange="recalc()"><option>THB</option><option>USD</option></select></label>
+  <label>จำนวนหน่วย<input id="units" type="number" step="any" inputmode="decimal" oninput="recalc()"></label>
+  <label>ราคาต่อหน่วย (ตามสกุลเงิน)<input id="px" type="number" step="any" inputmode="decimal" oninput="recalc()"></label>
+  <label id="fxl" style="display:none">อัตราแลกเปลี่ยน (บาทต่อ 1 USD)<input id="fx" type="number" step="any" inputmode="decimal" oninput="recalc()"></label>
+  <label>ค่าธรรมเนียม (บาท ไม่บังคับ)<input id="fee" type="number" step="0.01" inputmode="decimal" oninput="recalc()"></label>`}
+function secSellForm(){const ul=L.filter(l=>!SL.some(s=>s.lot_id===l.id));
+  return `<label>ล็อตที่จะขาย (ขายทั้งล็อต)<select id="lotsel" onchange="recalc()"><option value="">${ul.length?'เลือกล็อต':'ไม่มีล็อตที่ถืออยู่'}</option>${ul.map(l=>`<option value="${l.id}">${esc(l.symbol)} · ${fdt(lotDate(l))} · ${Number(l.units)} หน่วย · ต้นทุน ${fmt(l.cost_thb)}</option>`).join('')}</select></label>
+  <label>ราคาขายต่อหน่วย (ตามสกุลเงินของล็อต)<input id="px" type="number" step="any" inputmode="decimal" oninput="recalc()"></label>
+  <label id="fxl" style="display:none">อัตราแลกเปลี่ยน (บาทต่อ 1 USD)<input id="fx" type="number" step="any" inputmode="decimal" oninput="recalc()"></label>
+  <label>บัญชีที่รับเงิน<select id="to">${opts(A.filter(a=>a.account_type!=='card'))}</select></label>`}
+function recalc(){const g=id=>$(id)?$(id).value:'',ty=window._type,fl=$('fxl');
+  if(ty==='security_buy'){const usd=g('cur')==='USD';fl.style.display=usd?'flex':'none';const v=Number(g('units'))*Number(g('px'))*(usd?Number(g('fx')):1)+(Number(g('fee'))||0);if(isFinite(v)&&v>0)$('amt').value=v.toFixed(2)}
+  if(ty==='security_sell'){const l=L.find(x=>x.id===g('lotsel'));if(!l)return;const usd=l.currency==='USD';fl.style.display=usd?'flex':'none';const v=Number(l.units)*Number(g('px'))*(usd?Number(g('fx')):1);if(isFinite(v)&&v>0)$('amt').value=v.toFixed(2)}}
+function preview(type){
+  const g=id=>$(id)?$(id).value:'',amt=Number(g('amt')),from=g('from')||null,to=g('to')||null,e=$('fe'),sell=type==='security_sell';
+  if(!(amt>0)){e.textContent='ใส่จำนวนเงินมากกว่า 0 (ถ้าเป็นหุ้น/กองทุน ใส่หน่วยและราคาให้ครบ)';return}
+  if(type!=='income'&&!sell&&!from){e.textContent='เลือกบัญชีที่จ่าย';return}
+  if((type==='income'||type==='transfer'||type==='card_payment'||sell)&&!to){e.textContent='เลือกบัญชีที่รับ';return}
+  if((type==='transfer'||type==='card_payment')&&from===to){e.textContent='บัญชีต้นทางกับปลายทางต้องไม่ซ้ำกัน';return}
+  if(!g('dt')){e.textContent='ใส่วันที่-เวลา';return}
+  let lot=null,sale=null,cat=g('cat').trim()||(type==='card_payment'?'ชำระบัตรเครดิต':null),ex='';
+  if(type==='security_buy'){const sy=g('sym').trim().toUpperCase(),u=Number(g('units')),px=Number(g('px')),cur=g('cur'),fx=cur==='USD'?Number(g('fx')):1;
+    if(!g('hold')||!sy||!(u>0)||!(px>0)||!(fx>0)){e.textContent='เลือกบัญชีที่ถือ ใส่ชื่อหลักทรัพย์ จำนวนหน่วย ราคา (และอัตราแลกเปลี่ยนถ้าเป็น USD)';return}
+    lot={holding_account_id:g('hold'),symbol:sy,units:u,unit_price:px,currency:cur,fx_rate:fx,fee:Number(g('fee'))||0,cost_thb:amt};cat=sy;
+    ex=`<div class="row"><span>หลักทรัพย์</span><span>${esc(sy)}</span></div><div class="row"><span>จำนวน × ราคา</span><span>${u} × ${px} ${cur}</span></div><div class="row"><span>บัญชีที่ถือ</span><span>${esc(nm(g('hold')))}</span></div>`}
+  if(sell){const l=L.find(x=>x.id===g('lotsel')),px=Number(g('px')),fx=l&&l.currency==='USD'?Number(g('fx')):1;
+    if(!l||!(px>0)||!(fx>0)){e.textContent='เลือกล็อต ใส่ราคาขาย (และอัตราแลกเปลี่ยนถ้าเป็น USD)';return}
+    const profit=Math.round((amt-Number(l.cost_thb))*100)/100;
+    sale={lot_id:l.id,units:l.units,sell_price:px,fx_rate:fx,proceeds:amt,cost_thb:l.cost_thb,profit};cat=l.symbol;
+    ex=`<div class="row"><span>ขายล็อต</span><span>${esc(l.symbol)} · ${Number(l.units)} หน่วย</span></div><div class="row"><span>ต้นทุนล็อต</span><span>${fmt(l.cost_thb)}</span></div><div class="row"><span class="b">กำไร/ขาดทุน</span><b style="color:${profit>=0?'var(--pos)':'var(--neg)'}">${profit>=0?'+':''}${fmt(profit)}</b></div>`}
+  window._p={txn_type:type==='card_payment'?'transfer':type,amount:amt,from_account_id:from,to_account_id:to,category:cat,owner:g('own').trim()||null,note:g('note').trim()||null,occurred_at:new Date(g('dt')).toISOString()};window._x={lot,sale};
+  const line=(id,d)=>{const a=A.find(x=>x.id===id),b=bal(a);return `<div class="row"><span>${esc(a.nickname)}</span><span>${fmt(b)} → <b>${fmt(b+d)}</b></span></div>`};
+  openSheet(`<h2 style="margin-top:0">ตรวจสอบก่อนบันทึก</h2><div class="card"><div class="row"><span>ประเภท</span><b>${TL[type]}</b></div>
+  <div class="row"><span>จำนวนเงิน</span><b>${fmt(amt)}</b></div><div class="row"><span>วันที่-เวลา</span><span>${fdt(_p.occurred_at)}</span></div>
+  ${!ex&&_p.category?`<div class="row"><span>รายละเอียด</span><span>${esc(_p.category)}</span></div>`:''}${_p.owner?`<div class="row"><span>เจ้าของ</span><span>${esc(_p.owner)}</span></div>`:''}${ex}${from?line(from,-amt):''}${to?line(to,amt):''}</div>
+  <div class="btns" style="margin-top:14px"><button class="ghost" onclick="openAdd('${type}')">กลับไปแก้</button><button class="pri" onclick="confirmSave()">ยืนยันบันทึก</button></div>`);
+}
+async function confirmSave(){const{lot,sale}=window._x||{};
+  const t=await q(sb.from('transactions').insert(window._p).select().single());
+  try{if(lot)await q(sb.from('security_lots').insert({...lot,buy_txn_id:t.id}));if(sale)await q(sb.from('security_sales').insert({...sale,sell_txn_id:t.id}))}
+  catch(x){await sb.from('transactions').update({deleted_at:new Date().toISOString()}).eq('id',t.id);load();return}
+  closeSheet();load()}
+function openSlip(id){
+  const t=T.find(x=>x.id===id);if(!t)return;const inn=isIn(t),lot=L.find(l=>l.buy_txn_id===id),sale=SL.find(s=>s.sell_txn_id===id);let ex='';
+  if(lot)ex=`<div class="row"><span>หลักทรัพย์</span><span>${esc(lot.symbol)}</span></div><div class="row"><span>จำนวน</span><span>${Number(lot.units)} หน่วย</span></div><div class="row"><span>ราคาต่อหน่วย</span><span>${Number(lot.unit_price)} ${lot.currency}${lot.currency==='USD'?' · อัตรา '+Number(lot.fx_rate):''}</span></div><div class="row"><span>บัญชีที่ถือ</span><span>${esc(nm(lot.holding_account_id))}</span></div>${Number(lot.fee)?`<div class="row"><span>ค่าธรรมเนียม</span><span>${fmt(lot.fee)}</span></div>`:''}`;
+  if(sale){const sl=L.find(l=>l.id===sale.lot_id);ex=`<div class="row"><span>ขายล็อต</span><span>${sl?esc(sl.symbol)+' · ซื้อเมื่อ '+fdt(lotDate(sl)):'-'}</span></div><div class="row"><span>จำนวน</span><span>${Number(sale.units)} หน่วย @ ${Number(sale.sell_price)}</span></div><div class="row"><span>ต้นทุนล็อต</span><span>${fmt(sale.cost_thb)}</span></div><div class="row"><b>กำไร/ขาดทุน</b><b style="color:${sale.profit>=0?'var(--pos)':'var(--neg)'}">${sale.profit>=0?'+':''}${fmt(sale.profit)}</b></div>`}
+  openSheet(`<div style="text-align:center"><div class="mut">${TL[t.txn_type]}</div><div style="font-size:34px;font-weight:600;color:${inn?'var(--pos)':'var(--neg)'}">${inn?'+':t.txn_type==='transfer'?'':'-'}${fmt(t.amount)}</div><div class="mut">${fdt(t.occurred_at)}</div></div>
+  <div class="card" style="margin:14px 0">${t.from_account_id?`<div class="row"><span>จากบัญชี</span><span>${esc(nm(t.from_account_id))}</span></div>`:''}${t.to_account_id?`<div class="row"><span>เข้าบัญชี</span><span>${esc(nm(t.to_account_id))}</span></div>`:''}
+  ${t.category&&!ex?`<div class="row"><span>รายละเอียด</span><span>${esc(t.category)}</span></div>`:''}${ex}${t.owner?`<div class="row"><span>เจ้าของ</span><span>${esc(t.owner)}</span></div>`:''}${t.note?`<div class="row"><span>หมายเหตุ</span><span>${esc(t.note)}</span></div>`:''}
+  <div class="row"><span>บันทึกเข้าระบบ</span><span class="mut">${fdt(t.created_at)}</span></div></div>
+  <button class="del" style="width:100%" onclick="delTxn('${t.id}')">ลบรายการนี้</button>`);
+}
+async function delTxn(id){
+  const lot=L.find(l=>l.buy_txn_id===id),sale=SL.find(s=>s.sell_txn_id===id);
+  if(lot&&SL.some(s=>s.lot_id===lot.id)){alert('ล็อตนี้ถูกขายไปแล้ว ลบรายการขายก่อน แล้วค่อยลบรายการซื้อ');return}
+  if(!confirm('ลบรายการนี้? (ยอดบัญชีจะคืนค่า และมีประวัติการแก้ไขเก็บไว้)'))return;
+  if(sale)await q(sb.from('security_sales').delete().eq('sell_txn_id',id));
+  if(lot)await q(sb.from('security_lots').delete().eq('id',lot.id));
+  await q(sb.from('transactions').update({deleted_at:new Date().toISOString()}).eq('id',id));closeSheet();load()}
+function monthData(ym){const[y,m]=ym.split('-').map(Number),s0=new Date(y,m-1,1),e0=new Date(y,m,1);let inc=0,exp=0;
+  const R=A.map(a=>({a,open:Number(a.opening_balance),i:0,o:0})),mp={};R.forEach(r=>mp[r.a.id]=r);
+  for(const t of T){const d=new Date(t.occurred_at),x=Number(t.amount);
+    const ap=(id,sg)=>{const r=mp[id];if(!r)return;if(d<s0)r.open+=sg*x;else if(d<e0){if(sg>0)r.i+=x;else r.o+=x}};
+    if(t.to_account_id)ap(t.to_account_id,1);if(t.from_account_id)ap(t.from_account_id,-1);
+    if(d>=s0&&d<e0){if(t.txn_type==='income')inc+=x;if(t.txn_type==='expense'||t.txn_type==='card_purchase')exp+=x}}
+  return{R,inc,exp,s0,e0}}
+function openMonth(ym){ym=ym||nowLocal().slice(0,7);const{R,inc,exp}=monthData(ym);
+  openSheet(`<h2 style="margin-top:0">สรุปรายเดือน</h2><label>เลือกเดือน<input type="month" value="${ym}" onchange="if(this.value)openMonth(this.value)"></label>
+  <button class="pri" style="width:100%;margin-bottom:12px" onclick="exportXlsx('${ym}')">ดาวน์โหลดเป็นไฟล์ Excel</button>
+  <div class="card" style="margin-bottom:12px"><div class="row"><span>รายรับรวม</span><b style="color:var(--pos)">${fmt(inc)}</b></div><div class="row"><span>รายจ่ายรวม (รวมรูดบัตร)</span><b style="color:var(--neg)">${fmt(exp)}</b></div><div class="row"><span>คงเหลือสุทธิ</span><b>${fmt(inc-exp)}</b></div></div>
+  <div class="mut" style="margin-bottom:4px">โอนระหว่างบัญชีของตัวเอง และการซื้อ-ขายหุ้น/กองทุน ไม่นับเป็นรายรับหรือรายจ่าย</div>
+  <div class="card">`+R.map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="b">${esc(r.a.nickname)}</div><div class="mut" style="display:grid;grid-template-columns:1fr 1fr;gap:2px 10px"><span>ยกมา ${fmt(r.open)}</span><span>เข้า ${fmt(r.i)}</span><span>ออก ${fmt(r.o)}</span><span class="b" style="color:var(--ink)">คงเหลือ ${fmt(r.open+r.i-r.o)}</span></div></div>`).join('')+`</div><button class="ghost" style="width:100%;margin-top:14px" onclick="closeSheet()">ปิด</button>`)}
+function exportXlsx(ym){
+  if(!window.XLSX){alert('โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่');return}
+  const{R,inc,exp,s0,e0}=monthData(ym),wb=XLSX.utils.book_new(),used={},d2=d=>{const x=new Date(d);return[x.toLocaleDateString('th-TH'),x.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})]};
+  const sn=n=>{let b=String(n).replace(/[\[\]:*?\/\\]/g,'').slice(0,28)||'บัญชี',k=b,i=2;while(used[k]){k=b.slice(0,26)+'_'+i++}used[k]=1;return k};
+  const add=(rows,name)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),sn(name));
+  const sum=[['สรุปเดือน '+ym],[],['รายรับรวม',inc],['รายจ่ายรวม (รวมรูดบัตร)',exp],['คงเหลือสุทธิ',inc-exp],[],['บัญชี','ธนาคาร','ประเภท','ยกมา','เข้า','ออก','คงเหลือสิ้นเดือน']];
+  R.forEach(r=>sum.push([r.a.nickname,r.a.institution||'',AT[r.a.account_type],r.open,r.i,r.o,r.open+r.i-r.o]));add(sum,'สรุป');
+  for(const r of R){const rows=[[r.a.nickname+' · เดือน '+ym],['ยกมา',r.open],[],['วันที่','เวลา','ทิศทาง','จำนวนเงิน','ประเภท','รายละเอียด','เจ้าของ','หมายเหตุ']];
+    T.filter(t=>{const d=new Date(t.occurred_at);return d>=s0&&d<e0&&(t.from_account_id===r.a.id||t.to_account_id===r.a.id)}).sort((a,b)=>new Date(a.occurred_at)-new Date(b.occurred_at))
+     .forEach(t=>{const[dd,tt]=d2(t.occurred_at);rows.push([dd,tt,t.to_account_id===r.a.id?'เข้า':'ออก',Number(t.amount),TL[t.txn_type],t.category||'',t.owner||'',t.note||''])});
+    rows.push([],['รวมเข้า',r.i],['รวมออก',r.o],['คงเหลือสิ้นเดือน',r.open+r.i-r.o]);add(rows,r.a.nickname)}
+  const hs=holdings(),pf=[['พอร์ตหุ้น/กองทุน (ราคาล่าสุดที่กรอกไว้)'],[],['หลักทรัพย์','สกุล','หน่วยรวม','ต้นทุน (บาท)','ราคาล่าสุด','ณ วันที่','มูลค่า (บาท)','กำไร/ขาดทุน (บาท)','%']];
+  hs.forEach(h=>pf.push([h.sym,h.cur,h.units,h.cost,h.price==null?'':h.price,h.asof?d2(h.asof)[0]:'',h.value==null?'':h.value,h.pl==null?'':h.pl,h.pl==null||!h.cost?'':h.pl/h.cost]));
+  pf.push([],['รายล็อต'],['วันที่ซื้อ','หลักทรัพย์','บัญชีที่ถือ','หน่วย','ราคาต่อหน่วย','สกุล','อัตราแลกเปลี่ยน','ค่าธรรมเนียม','ต้นทุน (บาท)','สถานะ','กำไรที่รับรู้ (บาท)']);
+  L.forEach(l=>{const s=SL.find(x=>x.lot_id===l.id);pf.push([d2(lotDate(l))[0],l.symbol,nm(l.holding_account_id),Number(l.units),Number(l.unit_price),l.currency,Number(l.fx_rate),Number(l.fee),Number(l.cost_thb),s?'ขายแล้ว':'ถืออยู่',s?Number(s.profit):''])});add(pf,'พอร์ตลงทุน');
+  const sl=[['รายการขายหุ้น/กองทุน'],[],['วันที่ขาย','หลักทรัพย์','หน่วย','ราคาขาย','อัตราแลกเปลี่ยน','รับเงิน (บาท)','ต้นทุน (บาท)','กำไร/ขาดทุน (บาท)']];
+  SL.forEach(s=>{const l=L.find(x=>x.id===s.lot_id),t=T.find(x=>x.id===s.sell_txn_id);sl.push([t?d2(t.occurred_at)[0]:'',l?l.symbol:'',Number(s.units),Number(s.sell_price),Number(s.fx_rate),Number(s.proceeds),Number(s.cost_thb),Number(s.profit)])});add(sl,'ขายหุ้น-กองทุน');
+  XLSX.writeFile(wb,'AnnyLuk_'+ym+'.xlsx');
+}
+function openManage(){
+  openSheet(`<h2 style="margin-top:0">จัดการบัญชี</h2><div class="card">`+A.map((a,i)=>`<div class="row"><div><div>${esc(a.nickname)}</div><div class="mut">${esc(a.institution||'-')} · ${AT[a.account_type]}</div></div>
+  <div style="display:flex;gap:6px"><button class="ghost" aria-label="เลื่อนขึ้น" onclick="mv(${i},-1)">▲</button><button class="ghost" aria-label="เลื่อนลง" onclick="mv(${i},1)">▼</button><button onclick="openEdit('${a.id}')">แก้ไข</button></div></div>`).join('')+`</div>
+  <div class="btns" style="margin-top:14px"><button class="ghost" onclick="closeSheet()">ปิด</button><button class="pri" onclick="openEdit()">+ เพิ่มบัญชี</button></div>`);
+}
+async function mv(i,d){const j=i+d;if(j<0||j>=A.length)return;const a=A[i],b=A[j];
+  await q(sb.from('accounts').update({display_order:b.display_order}).eq('id',a.id));
+  await q(sb.from('accounts').update({display_order:a.display_order}).eq('id',b.id));
+  A=await q(sb.from('accounts').select('*').is('deleted_at',null).order('display_order'));openManage();home()}
+function openEdit(id){
+  const a=id?A.find(x=>x.id===id):{nickname:'',institution:'',account_type:'deposit',opening_balance:0,credit_limit:''};
+  openSheet(`<h2 style="margin-top:0">${id?'แก้ไขบัญชี':'เพิ่มบัญชี'}</h2><label>ชื่อเรียก<input id="en" value="${esc(a.nickname)}"></label>
+  <label>ธนาคาร/สถาบัน<input id="ei" value="${esc(a.institution)}"></label>
+  <label>ประเภท<select id="et">${Object.keys(AT).map(k=>`<option value="${k}"${k===a.account_type?' selected':''}>${AT[k]}</option>`).join('')}</select></label>
+  <label>ยอดยกมา (บัตรที่มีหนี้อยู่ ใส่เป็นเลขติดลบ)<input id="eo" type="number" step="0.01" value="${a.opening_balance}"></label>
+  <label>วงเงิน (เฉพาะบัตรเครดิต)<input id="el" type="number" step="0.01" value="${a.credit_limit==null?'':a.credit_limit}"></label><div class="err" id="ee"></div>
+  <div class="btns"><button class="ghost" onclick="openManage()">ยกเลิก</button><button class="pri" onclick="saveAcct('${id||''}')">บันทึก</button></div>
+  ${id?`<button class="del" style="width:100%;margin-top:10px" onclick="delAcct('${id}')">ลบบัญชีนี้</button>`:''}`);
+}
+async function saveAcct(id){
+  const n=$('en').value.trim();if(!n){$('ee').textContent='ใส่ชื่อบัญชี';return}
+  const t=$('et').value,row={nickname:n,institution:$('ei').value.trim()||null,account_type:t,opening_balance:Number($('eo').value)||0,credit_limit:t==='card'&&$('el').value!==''?Number($('el').value):null};
+  if(id)await q(sb.from('accounts').update(row).eq('id',id));
+  else{row.display_order=A.reduce((m,x)=>Math.max(m,x.display_order),0)+1;await q(sb.from('accounts').insert(row))}
+  await load();openManage();
+}
+async function delAcct(id){if(!confirm('ลบบัญชีนี้? รายการเก่าที่เกี่ยวข้องจะยังอยู่ในประวัติ'))return;
+  await q(sb.from('accounts').update({deleted_at:new Date().toISOString()}).eq('id',id));await load();openManage()}
+init();
+</script>
+</body>
+</html>
